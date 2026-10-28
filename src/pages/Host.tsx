@@ -79,7 +79,12 @@ export default function Host() {
       .from('rooms')
       .update({ called_numbers: updated, status: 'playing' })
       .eq('code', room.code)
-    if (error) console.error('No se pudo cantar el número:', error.message)
+    if (error) {
+      console.error('No se pudo cantar el número:', error.message)
+    } else {
+      // Actualiza de inmediato en vez de esperar al evento de Realtime (que puede tardar un poco).
+      setRoom((prev) => (prev ? { ...prev, called_numbers: updated, status: 'playing' } : prev))
+    }
     setDrawing(false)
   }
 
