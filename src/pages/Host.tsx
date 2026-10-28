@@ -25,7 +25,7 @@ export default function Host() {
 
   const joinUrl = useMemo(() => {
     if (!code) return ''
-    return `${window.location.origin}${import.meta.env.BASE_URL}join?code=${code}`
+    return `${window.location.origin}${import.meta.env.BASE_URL}#/join?code=${code}`
   }, [code])
 
   useEffect(() => {
