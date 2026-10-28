@@ -100,7 +100,7 @@ export default function Play() {
 
   return (
     <div className="page page-center">
-      {gameOver && (
+      {(gameOver || room.status === 'finished') && (
         <div className="banner">¡La partida terminó! Gracias por jugar, {name}.</div>
       )}
 

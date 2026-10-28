@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase, type Room } from '../lib/supabase'
@@ -17,6 +17,8 @@ export default function Host() {
   const [notFound, setNotFound] = useState(false)
   const [claims, setClaims] = useState<Claim[]>([])
   const [drawing, setDrawing] = useState(false)
+  const [finishing, setFinishing] = useState(false)
+  const claimsChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   const hostToken = code ? loadHostToken(code) : null
   const isHost = !!room && room.host_token === hostToken
@@ -60,11 +62,13 @@ export default function Host() {
         setClaims((prev) => [{ ...(payload as Omit<Claim, 'claimedAt'>), claimedAt: Date.now() }, ...prev])
       })
       .subscribe()
+    claimsChannelRef.current = claimsChannel
 
     return () => {
       active = false
       supabase.removeChannel(roomChannel)
       supabase.removeChannel(claimsChannel)
+      claimsChannelRef.current = null
     }
   }, [code])
 
@@ -89,13 +93,22 @@ export default function Host() {
   }
 
   async function handleFinish() {
-    if (!room) return
-    await supabase.from('rooms').update({ status: 'finished' }).eq('code', room.code)
-    await supabase.channel(`room-claims-${room.code}`).send({
+    if (!room || finishing) return
+    setFinishing(true)
+    const { error } = await supabase.from('rooms').update({ status: 'finished' }).eq('code', room.code)
+    if (error) {
+      console.error('No se pudo finalizar la partida:', error.message)
+      setFinishing(false)
+      return
+    }
+    setRoom((prev) => (prev ? { ...prev, status: 'finished' } : prev))
+    // Reusa el canal ya conectado (suscribirse de nuevo aquí se queda esperando indefinidamente).
+    claimsChannelRef.current?.send({
       type: 'broadcast',
       event: 'game_over',
       payload: {},
     })
+    setFinishing(false)
   }
 
   if (notFound) {
@@ -150,10 +163,16 @@ export default function Host() {
         >
           {room.called_numbers.length >= 75 ? 'Se cantaron todos los números' : 'Siguiente número'}
         </button>
-        <button className="btn" onClick={handleFinish} disabled={room.status === 'finished'}>
-          Finalizar partida
+        <button className="btn" onClick={handleFinish} disabled={finishing}>
+          {finishing ? 'Finalizando…' : room.status === 'finished' ? 'Avisar de nuevo' : 'Finalizar partida'}
         </button>
       </div>
+
+      {room.status === 'finished' && (
+        <div className="banner">
+          La partida terminó. Si algún jugador no vio el aviso, toca "Avisar de nuevo".
+        </div>
+      )}
 
       {lastNumber !== undefined && (
         <div className="last-number">
